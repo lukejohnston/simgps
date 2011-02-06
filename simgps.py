@@ -1,4 +1,6 @@
 import math
+import binascii
+import datetime
 
 class Coord:
 	
@@ -19,7 +21,24 @@ class Coord:
 			return math.radians(self.latdeg)
 		else:
 			raise AttributeError
+	def toNMEA(self):
+		timestr = datetime.datetime.now().strftime("%H%M%S.00")
+		lat = abs(self.latdeg)
+		lon = abs(self.londeg)
 
+		if(self.latdeg > 0):
+			latchar = "N"
+		else :
+			latchar = "S"
+		if(self.londeg > 0):
+			lonchar = "E"
+		else:
+			lonchar = "W"
+
+		data = "GPGGA,%s,%f,%s,%f,%s,2,08,6.8,10.0,M,1.0,M,,0000" % (timestr, lat, latchar, lon, lonchar)
+		checksum = binascii.crc32(data) & 0xFF
+
+		return "$%s*%x\r\n" % (data, checksum)
 
 class SegmentIter:
 
@@ -32,26 +51,19 @@ class SegmentIter:
 		print start
 		print end
 		self.distance = self.d * 6371000
-		print "Distance is %f" % (self.distance)
 		self.count = 0
 		
 		time = self.distance / (self.speed / 3.6)
 		self.step = 1 / time	
-		print "Step is %f" % (self.step)
 	
 	def next(self):
 		A = math.sin((1 - self.count)*self.d) / math.sin(self.d)
-		print "A is %f" % (A)
 		B = math.sin(self.count * self.d) / math.sin(self.d)
-		print "B is %f" % (B)
 		x = A * math.cos(self.start.lat) * math.cos(self.start.lon) +\
 			B*math.cos(self.end.lat) * math.cos(self.end.lon)
-		print "x is %f" % (x)
 		y = A* math.cos(self.start.lat) * math.sin(self.start.lon) +\
 			B * math.cos(self.end.lat) * math.sin(self.end.lon)
-		print "y is %f" % (y)
 		z = A * math.sin(self.start.lat) + B * math.sin(self.end.lat)
-		print "z is %f" % (z)
 		lat = math.atan2(z, math.sqrt(x**2 + y**2))
 		lon = math.atan2(y, x)
 		
@@ -92,8 +104,9 @@ if __name__ == "__main__":
 	segment = SegmentIter(start, end, 60)
 
 	for i in segment:
+		print i.toNMEA()
 		print i
-		time.sleep(1)
+		#time.sleep(1)
 	
 	print "Done!"
 
