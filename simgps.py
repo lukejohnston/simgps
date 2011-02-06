@@ -1,6 +1,7 @@
 import math
 import binascii
 import datetime
+import serial
 
 class Coord:
 	
@@ -98,15 +99,20 @@ if __name__ == "__main__":
 	import time
 	import sys
 
-	start = Coord(-27.55754, 153.006155)
-	end = Coord(-27.57670, 152.94475)
+	print "simgps: A simple GPS simulator"
+	print
+	start = Coord(input("Start latitude: "), input("Start longitude: "))
+	end = Coord(input("End latitude: "), input("End longitude: "))
+	
+	segment = SegmentIter(start, end, input("Speed (km/h): "))
 
-	segment = SegmentIter(start, end, 60)
+	ser = serial.Serial(raw_input("Serial port: "), 4800, timeout=0)
 
 	for i in segment:
 		print i.toNMEA()
 		print i
-		#time.sleep(1)
+		ser.write(i.toNMEA())
+		time.sleep(1)
 	
 	print "Done!"
 
