@@ -1,9 +1,40 @@
+#!/usr/bin/python
+"""
+	simgps: A simple GPS simulator
+
+	simgps outputs NMEA sentences to a serial port that simulate the
+	movement of a GPS from one point to another.
+
+	Copyright 2011 Luke Johnston
+
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+"""
+
+
+
 import math
 import binascii
 import datetime
 import serial
 
 class Coord:
+	"""
+	Class that represents a LatLon coordinate. Arguments to the constructor
+	should be in decimal degrees.
+	"""
 	
 	def __init__(self, lat, lon):
 		self.latdeg = lat
@@ -23,6 +54,10 @@ class Coord:
 		else:
 			raise AttributeError
 	def toNMEA(self):
+		"""
+		Returns the NMEA sentence the represents the coordinate
+		with the current time in the time field.
+		"""
 		timestr = datetime.datetime.now().strftime("%H%M%S.00")
 		lat = abs(self.latdeg)
 		lon = abs(self.londeg)
@@ -58,6 +93,16 @@ class SegmentIter:
 		self.step = 1 / time	
 	
 	def next(self):
+		"""
+		This is an implementation of a formula that calculates
+		an intermediate lat and lon between two given points a 
+		certain fraction of the distance between the point.
+
+		It was inspired by the description given on this page:
+
+		http://williams.best.vwh.net/avform.htm#Intermediate
+
+		"""
 		A = math.sin((1 - self.count)*self.d) / math.sin(self.d)
 		B = math.sin(self.count * self.d) / math.sin(self.d)
 		x = A * math.cos(self.start.lat) * math.cos(self.start.lon) +\
@@ -80,6 +125,16 @@ class SegmentIter:
 		
 
 def haversine(start, end):
+	"""
+	Implementation of the haversine formula that calculates the 
+	angle between two point on a sphere. This returns the value in radians
+	which then needs to be multiplied by the radius of the earth to get 
+	the actual distance.
+
+	It was inspired by the implementation that should be found here:
+
+	http://gorny.edu.pl/haversine.py
+	"""
 
 	start_lat = start.lat
 	start_lon = start.lon
@@ -115,5 +170,7 @@ if __name__ == "__main__":
 		time.sleep(1)
 	
 	print "Done!"
+
+	ser.close()
 
 	sys.exit(0)

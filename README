@@ -1,0 +1,10 @@
+simgps: A simple GPS simulator
+
+simgps generates coordinates between two given points at a given speed and
+outputs them to a serial port as NMEA sentences. At the moment, it is run
+interactively from the terminal.
+
+To run simgps you'll need:
+
+Python 2.6
+pyserial v2.5 for python2.6
