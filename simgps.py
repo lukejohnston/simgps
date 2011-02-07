@@ -29,6 +29,7 @@ import math
 import binascii
 import datetime
 import serial
+import sys
 
 class Coord:
         """
@@ -160,28 +161,68 @@ def haversine(start, end):
 
         return c
 
+def process_file(filename):
+        """
+        Process a file containing points on lines. One point per line with a
+        comma separator.
+        """
+        f = open(filename)
+        data = f.readlines()
+        coords = []
+        for i in data:
+                numbers = i.split(',')
+                if len(numbers) != 2:
+                        print "Bad line in file"
+                        f.close()
+                        sys.exit(1)
+                coords.append(Coord(float(numbers[0]), float(numbers[1])))
+        f.close()
+        return coords
+
 if __name__ == "__main__":
         import time
-        import sys
 
         print "simgps: A simple GPS simulator"
         print
-        start = Coord(input("Start latitude: "), input("Start longitude: "))
-        end = Coord(input("End latitude: "), input("End longitude: "))
-        
-        segment = SegmentIter(start, end, input("Speed (km/h): "))
-
+        filename = raw_input("File: ")
         ser = serial.Serial(raw_input("Serial port: "), 57600, timeout=0)
+        speed = input("Speed (km/h): ")
+        if not filename:
+                start = Coord(input("Start latitude: "), input("Start longitude: "))
+                end = Coord(input("End latitude: "), input("End longitude: "))
+                
+                segment = SegmentIter(start, end, speed)
+                
+                for i in segment:
+                        print i.toNMEA()
+                        #print i
+                        ser.write(i.toNMEA())
+                        print ser.read(1000)
+                        time.sleep(1)
+                
+                print "Done!"
 
-        for i in segment:
-                print i.toNMEA()
-                #print i
-                ser.write(i.toNMEA())
-                print ser.read(1000)
-                time.sleep(1)
-        
-        print "Done!"
+                ser.close()
 
-        ser.close()
+                sys.exit(0)
+                
+        path = process_file(filename)
 
-        sys.exit(0)
+        count = 1
+
+        try:
+                while True:
+                        segment = SegmentIter(path[count-1], path[count], speed)
+                        for i in segment:
+                                #print i.toNMEA()
+                                print i
+                                ser.write(i.toNMEA())
+                                print ser.read(1000)
+                                time.sleep(1)
+                        count += 1
+                        print "Next point"
+                        if count >= len(path):
+                                count = 1
+        except KeyboardInterrupt:
+                ser.close()
+                sys.exit(1)
