@@ -54,12 +54,13 @@ class Coord:
                         return math.radians(self.latdeg)
                 else:
                         raise AttributeError
-        def toNMEA(self):
+        def toNMEA(self, speed, heading):
                 """
                 Returns the NMEA sentence the represents the coordinate
                 with the current time in the time field.
                 """
                 timestr = datetime.datetime.now().strftime("%H%M%S.00")
+                datestr = datetime.datetime.now().strftime("%d%m%y")
                 
                 lat = abs(self.latdeg)
                 latdegrees = int(lat)
@@ -80,13 +81,28 @@ class Coord:
                 else:
                         lonchar = "W"
 
-                data = "GPGGA,%s,%f,%s,%f,%s,2,08,6.8,10.0,M,1.0,M,,0000" %\
+                gga = "GPGGA,%s,%f,%s,%f,%s,2,08,6.8,10.0,M,1.0,M,,0000" %\
                        (timestr, latminutes, latchar, lonminutes, lonchar)
-                checksum = 0
-                for i in data:
-                        checksum ^= ord(i)
+                rmc = "GPRMC,%s,A,%f,%s,%f,%s,%f,%d,%s,,,," %\
+                      (timestr, latminutes, latchar, lonminutes, lonchar, speed,\
+                       heading, datestr)
+                gsa = "GPGSA,A,3,1,2,3,4,5,6,7,8,9,10,11,12,1.0,1.0,1.0"
+                
+                ggachecksum = 0
+                for i in gga:
+                        ggachecksum ^= ord(i)
 
-                return "$%s*%x\r\n" % (data, checksum & 0xff)
+                rmcchecksum = 0
+                for i in rmc:
+                        rmcchecksum ^= ord(i)
+
+                gsachecksum = 0
+                for i in gsa:
+                        gsachecksum ^= ord(i)
+
+                return "$%s*%x\r\n$%s*%x\r\n$%s*%x\r\n" %\
+                       (gga, ggachecksum & 0xff, rmc, rmcchecksum & 0xff, gsa,\
+                        gsachecksum & 0xff)
 
 class SegmentIter:
 
@@ -194,9 +210,9 @@ if __name__ == "__main__":
                 segment = SegmentIter(start, end, speed)
                 
                 for i in segment:
-                        print i.toNMEA()
+                        print i.toNMEA(speed / 1.92, 0)
                         #print i
-                        ser.write(i.toNMEA())
+                        ser.write(i.toNMEA(speed / 1.92, 0))
                         print ser.read(1000)
                         time.sleep(1)
                 
@@ -214,9 +230,9 @@ if __name__ == "__main__":
                 while True:
                         segment = SegmentIter(path[count-1], path[count], speed)
                         for i in segment:
-                                #print i.toNMEA()
-                                print i
-                                ser.write(i.toNMEA())
+                                print i.toNMEA(speed / 1.92, 0)
+                                #print i
+                                ser.write(i.toNMEA(speed / 1.92, 0))
                                 print ser.read(1000)
                                 time.sleep(1)
                         count += 1
