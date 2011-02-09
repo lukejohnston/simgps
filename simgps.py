@@ -30,6 +30,7 @@ import binascii
 import datetime
 import serial
 import sys
+from Tkinter import *
 
 class Coord:
         """
@@ -54,55 +55,6 @@ class Coord:
                         return math.radians(self.latdeg)
                 else:
                         raise AttributeError
-        def toNMEA(self, speed, heading):
-                """
-                Returns the NMEA sentence the represents the coordinate
-                with the current time in the time field.
-                """
-                timestr = datetime.datetime.now().strftime("%H%M%S.00")
-                datestr = datetime.datetime.now().strftime("%d%m%y")
-                
-                lat = abs(self.latdeg)
-                latdegrees = int(lat)
-                latminutes = (lat - latdegrees) * 60
-                latminutes += latdegrees * 100
-
-                lon = abs(self.londeg)
-                londegrees = int(lon)
-                lonminutes = (lon - londegrees) * 60
-                lonminutes += londegrees * 100
-
-                if(self.latdeg > 0):
-                        latchar = "N"
-                else :
-                        latchar = "S"
-                if(self.londeg > 0):
-                        lonchar = "E"
-                else:
-                        lonchar = "W"
-
-                gga = "GPGGA,%s,%f,%s,%f,%s,2,08,6.8,10.0,M,1.0,M,,0000" %\
-                       (timestr, latminutes, latchar, lonminutes, lonchar)
-                rmc = "GPRMC,%s,A,%f,%s,%f,%s,%f,%d,%s,,,," %\
-                      (timestr, latminutes, latchar, lonminutes, lonchar, speed,\
-                       heading, datestr)
-                gsa = "GPGSA,A,3,1,2,3,4,5,6,7,8,9,10,11,12,1.0,1.0,1.0"
-                
-                ggachecksum = 0
-                for i in gga:
-                        ggachecksum ^= ord(i)
-
-                rmcchecksum = 0
-                for i in rmc:
-                        rmcchecksum ^= ord(i)
-
-                gsachecksum = 0
-                for i in gsa:
-                        gsachecksum ^= ord(i)
-
-                return "$%s*%x\r\n$%s*%x\r\n$%s*%x\r\n" %\
-                       (gga, ggachecksum & 0xff, rmc, rmcchecksum & 0xff, gsa,\
-                        gsachecksum & 0xff)
 
 class SegmentIter:
 
@@ -149,7 +101,116 @@ class SegmentIter:
         
         def __iter__(self):
                 return self
+class SimGPSApp:
+
+        def __init__(self, master = None):
+                master.title("SimGPS")
+
+                frame = Frame(master)
+
+                self.master = master
+
+                self.currentLocationLabel = Label(frame)
+                self.currentLocationLabel.pack(side = TOP)
+
+                self.pauseButton = Button(frame, text = "Pause",\
+                                          command = self.pause)
+                self.pauseButton.pack(side = TOP)
+
+                self.paused = False
+                print "simgps: A simple GPS simulator"
+                print
+                filename = raw_input("File: ")
+                self.ser = serial.Serial(raw_input("Serial port: "), 57600, timeout=0)
+                self.speed = input("Speed (km/h): ")
+                self.heading = 0
+
+                self.path = process_file(filename)
+
+                self.count = 1
+                self.segment = SegmentIter(self.path[self.count-1],\
+                                           self.path[self.count], self.speed)
+                self.master.after(1000, self.nextSentence)
+
+                frame.pack()
+
+        def nextSentence(self):
+                try:
+                        coord = self.segment.next()
+                        self.currentLocationLabel.configure(text = str(coord))
+                        sentence = self.toNMEA(coord)
+                        print sentence
+                        self.ser.write(sentence)
+                        print self.ser.read(1000)
+                except StopIteration:
+                        self.count += 1
+                        if self.count >= len(self.path):
+                                self.count = 1
+                        self.segment = SegmentIter(self.path[self.count-1],\
+                                           self.path[self.count], self.speed)
+                finally:
+                        self.master.after(1000, self.nextSentence)
+                        
+
+        def pause(self):
+                self.paused = not self.paused
+                if self.paused:
+                        self.pauseButton.configure(text = "Resume")
+                else :
+                        self.pauseButton.configure(text = "Pause")
+
+        def toNMEA(self, coord):
+                """
+                Returns the NMEA sentence the represents the coordinate
+                with the current time in the time field.
+                """
+                timestr = datetime.datetime.now().strftime("%H%M%S.00")
+                datestr = datetime.datetime.now().strftime("%d%m%y")
                 
+                lat = abs(coord.latdeg)
+                latdegrees = int(lat)
+                latminutes = (lat - latdegrees) * 60
+                latminutes += latdegrees * 100
+
+                lon = abs(coord.londeg)
+                londegrees = int(lon)
+                lonminutes = (lon - londegrees) * 60
+                lonminutes += londegrees * 100
+
+                if(coord.latdeg > 0):
+                        latchar = "N"
+                else :
+                        latchar = "S"
+                if(coord.londeg > 0):
+                        lonchar = "E"
+                else:
+                        lonchar = "W"
+
+                gga = "GPGGA,%s,%f,%s,%f,%s,2,08,6.8,10.0,M,1.0,M,,0000" %\
+                       (timestr, latminutes, latchar, lonminutes, lonchar)
+                rmc = "GPRMC,%s,A,%f,%s,%f,%s,%f,%d,%s,,,," %\
+                      (timestr, latminutes, latchar, lonminutes, lonchar, self.speed,\
+                       self.heading, datestr)
+                if self.paused:
+                        gsa = "GPGSA,A,1,1,2,3,4,5,6,7,8,9,10,11,12,1.0,1.0,1.0"
+                else :
+                        gsa = "GPGSA,A,3,1,2,3,4,5,6,7,8,9,10,11,12,1.0,1.0,1.0"
+                
+                ggachecksum = 0
+                for i in gga:
+                        ggachecksum ^= ord(i)
+
+                rmcchecksum = 0
+                for i in rmc:
+                        rmcchecksum ^= ord(i)
+
+                gsachecksum = 0
+                for i in gsa:
+                        gsachecksum ^= ord(i)
+
+                return "$%s*%x\r\n$%s*%x\r\n$%s*%x\r\n" %\
+                       (gga, ggachecksum & 0xff, rmc, rmcchecksum & 0xff, gsa,\
+                        gsachecksum & 0xff)
 
 def haversine(start, end):
         """
@@ -196,49 +257,6 @@ def process_file(filename):
         return coords
 
 if __name__ == "__main__":
-        import time
-
-        print "simgps: A simple GPS simulator"
-        print
-        filename = raw_input("File: ")
-        ser = serial.Serial(raw_input("Serial port: "), 57600, timeout=0)
-        speed = input("Speed (km/h): ")
-        if not filename:
-                start = Coord(input("Start latitude: "), input("Start longitude: "))
-                end = Coord(input("End latitude: "), input("End longitude: "))
-                
-                segment = SegmentIter(start, end, speed)
-                
-                for i in segment:
-                        print i.toNMEA(speed / 1.92, 0)
-                        #print i
-                        ser.write(i.toNMEA(speed / 1.92, 0))
-                        print ser.read(1000)
-                        time.sleep(1)
-                
-                print "Done!"
-
-                ser.close()
-
-                sys.exit(0)
-                
-        path = process_file(filename)
-
-        count = 1
-
-        try:
-                while True:
-                        segment = SegmentIter(path[count-1], path[count], speed)
-                        for i in segment:
-                                print i.toNMEA(speed / 1.92, 0)
-                                #print i
-                                ser.write(i.toNMEA(speed / 1.92, 0))
-                                print ser.read(1000)
-                                time.sleep(1)
-                        count += 1
-                        print "Next point"
-                        if count >= len(path):
-                                count = 1
-        except KeyboardInterrupt:
-                ser.close()
-                sys.exit(1)
+        root = Tk()
+        SimGPSApp(root)
+        root.mainloop()
