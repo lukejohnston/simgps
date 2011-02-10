@@ -120,12 +120,18 @@ class SimGPSApp:
                 self.paused = False
                 print "simgps: A simple GPS simulator"
                 print
+                
                 filename = raw_input("File: ")
+                if filename.endswith(".kml"):
+                        self.path = process_kml(filename)
+                else :
+                        self.path = process_file(filename)
+                        
                 self.ser = serial.Serial(raw_input("Serial port: "), 57600, timeout=0)
                 self.speed = input("Speed (km/h): ")
                 self.heading = 0
 
-                self.path = process_file(filename)
+
 
                 self.count = 1
                 self.segment = SegmentIter(self.path[self.count-1],\
@@ -256,6 +262,24 @@ def process_file(filename):
         f.close()
         return coords
 
+def process_kml(filename):
+        """
+        Process a KML file that contains a path.
+        """
+        
+        f= open(filename)
+        data = f.read()
+        coordTag = data.split("<coordinates>")[1]
+        coordTag = coordTag.split("</coordinates>")[0]
+        coordTag = coordTag.strip()
+        coordLines = coordTag.split(" ")
+        coords = []
+        for i in coordLines:
+                numbers = i.split(',')
+                coords.append(Coord(float(numbers[1]), float(numbers[0])))
+        f.close()
+        return coords
+                
 if __name__ == "__main__":
         root = Tk()
         SimGPSApp(root)
