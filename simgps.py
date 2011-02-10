@@ -139,7 +139,7 @@ class SimGPSApp:
                         coord = self.segment.next()
                         self.currentLocationLabel.configure(text = str(coord))
                         sentence = self.toNMEA(coord)
-                        print sentence
+                        #print sentence
                         self.ser.write(sentence)
                         print self.ser.read(1000)
                 except StopIteration:
@@ -189,7 +189,7 @@ class SimGPSApp:
                 gga = "GPGGA,%s,%f,%s,%f,%s,2,08,6.8,10.0,M,1.0,M,,0000" %\
                        (timestr, latminutes, latchar, lonminutes, lonchar)
                 rmc = "GPRMC,%s,A,%f,%s,%f,%s,%f,%d,%s,,,," %\
-                      (timestr, latminutes, latchar, lonminutes, lonchar, self.speed,\
+                      (timestr, latminutes, latchar, lonminutes, lonchar, self.speed/1.85,\
                        self.heading, datestr)
                 if self.paused:
                         gsa = "GPGSA,A,1,1,2,3,4,5,6,7,8,9,10,11,12,1.0,1.0,1.0"
