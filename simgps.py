@@ -23,13 +23,14 @@
 
 """
 
-
-
 import math
 import datetime
 import serial
 import sys
 from Tkinter import *
+import platform
+import glob
+import tkFileDialog
 
 class Coord:
         """
@@ -109,42 +110,107 @@ class SimGPSApp:
 
                 self.master = master
 
-                self.currentLocationLabel = Label(frame)
-                self.currentLocationLabel.pack(side = TOP)
+                topFrame = Frame(frame)
+                midFrame = Frame(frame)
+                botFrame = Frame(frame)
+                labelFrame = Frame(frame)
+                buttonFrame = Frame(frame)
 
-                self.pauseButton = Button(frame, text = "Pause",\
-                                          command = self.pause)
-                self.pauseButton.pack(side = TOP)
+                #Contents of topFrame, open file button and label
+                self.fileButton = Button(topFrame, text = "Open Path File",\
+                                         command = self.openFile)
+                self.fileButton.pack(side = LEFT, anchor = W)
+                self.fileLabel = Label(topFrame, text = "No file loaded")
+                self.fileLabel.pack(side = LEFT, anchor = W)
 
-                self.paused = False
-                print "simgps: A simple GPS simulator"
-                print
-                
-                filename = raw_input("File: ")
+                #Content of midFrame, serial options
+                ports = findSerialPorts()
+                self.serialVar = StringVar(master)
+                if not ports:
+                        ports = ["No ports found"]
+                self.serialVar.set(ports[0])
+                self.serialMenu = apply(OptionMenu, (midFrame, self.serialVar)\
+                                        + tuple(ports))
+                self.serialMenu.pack(side = LEFT)
+                self.baudVar = StringVar()
+                self.baudVar.set("57600")
+                self.baudBox = Entry(midFrame, textvariable = self.baudVar)
+                self.baudBox.pack(side = LEFT)
+
+                #Contents of botFrame, speed and fix type
+                self.fixVar = StringVar(master)
+                self.fixVar.set("No Fix")
+                self.fixVar.trace('w', self.changeFix)
+                self.fixType = OptionMenu(botFrame, self.fixVar, "No Fix",\
+                                          "2D Fix", "3D Fix")
+                self.fixType.pack(side = LEFT)
+                self.speedVar = StringVar()
+                self.speedVar.set("100")
+                self.speedBox = Entry(botFrame, textvariable = self.speedVar, 
+                                      justify = RIGHT)
+                self.speedBox.pack(side = LEFT)
+                Label(botFrame, text = "km/h").pack(side = LEFT)
+
+                #Frame exclusively for the current location label
+                self.currentLocationLabel = Label(labelFrame)
+                self.currentLocationLabel.pack()
+
+                #Frame for the go and stop buttons
+                self.goButton = Button(buttonFrame, command = self.go,
+                                       text = "Go")
+                self.goButton.pack(side = LEFT)
+                topFrame.pack(side = TOP)
+                midFrame.pack(side = TOP)
+                botFrame.pack(side = TOP)
+                labelFrame.pack(side = TOP)
+                buttonFrame.pack(side = TOP)
+                frame.pack()
+
+                self.filename = ''
+
+                self.path = None
+
+        def changeFix(self, _, __, ___):
+                if self.path:
+                        self.path.setFix(self.fixVar.get())
+
+        def openFile(self):
+                self.filename = tkFileDialog.askopenfilename()
+                self.fileLabel.config(text = self.filename)
+        
+        def go(self):
+                if self.filename:
+                        self.path = PathSim(self.filename, self.serialVar.get(),
+                                            int(self.baudVar.get()),
+                                            int(self.speedVar.get()),
+                                            self.fixVar.get())
+                        self.nextSentence()
+        def nextSentence(self):
+                self.path.nextSentence()
+                self.currentLocationLabel.config(text = str(self.path.current))
+                self.master.after(1000, self.nextSentence)
+class PathSim:
+
+        def __init__(self, filename, serialPort, baud, speed, fix):
                 if filename.endswith(".kml"):
-                        self.path = process_kml(filename)
+                        self.open_kml(filename)
                 else :
-                        self.path = process_file(filename)
+                        self.open_file(filename)
                         
-                self.ser = serial.Serial(raw_input("Serial port: "), 57600, timeout=0)
-                self.speed = input("Speed (km/h): ")
+                self.ser = serial.Serial(serialPort, baud, timeout=0)
+                self.speed = speed
                 self.heading = 0
-
-
 
                 self.count = 1
                 self.segment = SegmentIter(self.path[self.count-1],\
                                            self.path[self.count], self.speed)
-                self.master.after(1000, self.nextSentence)
-
-                frame.pack()
+                self.fix = fix
 
         def nextSentence(self):
                 try:
-                        coord = self.segment.next()
-                        self.currentLocationLabel.configure(text = str(coord))
-                        sentence = self.toNMEA(coord)
-                        #print sentence
+                        self.current = self.segment.next()
+                        sentence = self.toNMEA(self.current)
+                        print sentence
                         self.ser.write(sentence)
                         print self.ser.read(1000)
                 except StopIteration:
@@ -153,16 +219,9 @@ class SimGPSApp:
                                 self.count = 1
                         self.segment = SegmentIter(self.path[self.count-1],\
                                            self.path[self.count], self.speed)
-                finally:
-                        self.master.after(1000, self.nextSentence)
-                        
 
-        def pause(self):
-                self.paused = not self.paused
-                if self.paused:
-                        self.pauseButton.configure(text = "Resume")
-                else :
-                        self.pauseButton.configure(text = "Pause")
+        def setFix(self, fix):
+                self.fix = fix
 
         def toNMEA(self, coord):
                 """
@@ -194,10 +253,12 @@ class SimGPSApp:
                 gga = "GPGGA,%s,%f,%s,%f,%s,2,08,6.8,10.0,M,1.0,M,,0000" %\
                        (timestr, latminutes, latchar, lonminutes, lonchar)
                 rmc = "GPRMC,%s,A,%f,%s,%f,%s,%f,%d,%s,,,," %\
-                      (timestr, latminutes, latchar, lonminutes, lonchar, self.speed/1.85,\
-                       self.heading, datestr)
-                if self.paused:
+                      (timestr, latminutes, latchar, lonminutes, lonchar, 
+                       self.speed/1.85, self.heading, datestr)
+                if self.fix == "No Fix":
                         gsa = "GPGSA,A,1,1,2,3,4,5,6,7,8,9,10,11,12,1.0,1.0,1.0"
+                elif self.fix == "2D Fix":
+                        gsa = "GPGSA,A,2,1,2,3,4,5,6,7,8,9,10,11,12,1.0,1.0,1.0"
                 else :
                         gsa = "GPGSA,A,3,1,2,3,4,5,6,7,8,9,10,11,12,1.0,1.0,1.0"
                 
@@ -216,6 +277,41 @@ class SimGPSApp:
                 return "$%s*%x\r\n$%s*%x\r\n$%s*%x\r\n" %\
                        (gga, ggachecksum & 0xff, rmc, rmcchecksum & 0xff, gsa,\
                         gsachecksum & 0xff)
+
+        def open_file(self, filename):
+                """
+                Process a file containing points on lines. One point per line with a
+                comma separator.
+                """
+                f = open(filename)
+                data = f.readlines()
+                self.path = []
+                for i in data:
+                        numbers = i.split(',')
+                        if len(numbers) != 2:
+                                print "Bad line in file"
+                                f.close()
+                                sys.exit(1)
+                        self.path.append(Coord(float(numbers[0]), float(numbers[1])))
+                f.close()
+
+        def open_kml(self, filename):
+                """
+                Process a KML file that contains a path.
+                """
+                
+                f= open(filename)
+                data = f.read()
+                coordTag = data.split("<coordinates>")[1]
+                coordTag = coordTag.split("</coordinates>")[0]
+                coordTag = coordTag.strip()
+                coordLines = coordTag.split(" ")
+                self.path = []
+                for i in coordLines:
+                        numbers = i.split(',')
+                        self.path.append(Coord(float(numbers[1]), float(numbers[0])))
+                f.close()
+
 
 def haversine(start, end):
         """
@@ -243,42 +339,23 @@ def haversine(start, end):
 
         return c
 
-def process_file(filename):
-        """
-        Process a file containing points on lines. One point per line with a
-        comma separator.
-        """
-        f = open(filename)
-        data = f.readlines()
-        coords = []
-        for i in data:
-                numbers = i.split(',')
-                if len(numbers) != 2:
-                        print "Bad line in file"
-                        f.close()
-                        sys.exit(1)
-                coords.append(Coord(float(numbers[0]), float(numbers[1])))
-        f.close()
-        return coords
+def findSerialPorts():
+    """ Based mostly on the pySerial example. Attempts to open each serial port
+    and returns a list of the name of the successful ones. 
+    Globs the filesystem on Mac. """
 
-def process_kml(filename):
-        """
-        Process a KML file that contains a path.
-        """
-        
-        f= open(filename)
-        data = f.read()
-        coordTag = data.split("<coordinates>")[1]
-        coordTag = coordTag.split("</coordinates>")[0]
-        coordTag = coordTag.strip()
-        coordLines = coordTag.split(" ")
-        coords = []
-        for i in coordLines:
-                numbers = i.split(',')
-                coords.append(Coord(float(numbers[1]), float(numbers[0])))
-        f.close()
-        return coords
-                
+    if(platform.system() == 'Darwin'):
+        return glob.glob('/dev/tty.usb*')
+    available = []
+    for i in range(256):
+        try:
+            s = serial.Serial(i)
+            available.append(s.portstr)
+            s.close()
+        except serial.SerialException:
+            pass
+    return available
+
 if __name__ == "__main__":
         root = Tk()
         SimGPSApp(root)
