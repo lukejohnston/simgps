@@ -26,7 +26,6 @@
 
 
 import math
-import binascii
 import datetime
 import serial
 import sys
