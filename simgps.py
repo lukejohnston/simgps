@@ -139,7 +139,7 @@ class SimGPSApp:
 
                 #Contents of botFrame, speed and fix type
                 self.fixVar = StringVar(master)
-                self.fixVar.set("No Fix")
+                self.fixVar.set("3D Fix")
                 self.fixVar.trace('w', self.changeFix)
                 self.fixType = OptionMenu(botFrame, self.fixVar, "No Fix",\
                                           "2D Fix", "3D Fix")
@@ -210,7 +210,7 @@ class PathSim:
                 try:
                         self.current = self.segment.next()
                         sentence = self.toNMEA(self.current)
-                        print sentence
+                        #print sentence
                         self.ser.write(sentence)
                         print self.ser.read(1000)
                 except StopIteration:
