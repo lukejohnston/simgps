@@ -158,7 +158,16 @@ class SimGPSApp:
                 #Frame for the go and stop buttons
                 self.goButton = Button(buttonFrame, command = self.go,
                                        text = "Go")
-                self.goButton.pack(side = LEFT)
+                self.goButton.pack(side = LEFT, padx = 10)
+                self.pauseButton = Button(buttonFrame, command = self.pause,
+                                          state = DISABLED, text = "Pause")
+                self.pauseButton.pack(side = LEFT, padx = 10)
+                self.restartButton = Button(buttonFrame,
+                                            command = self.restart,
+                                            text = "Restart")
+                self.restartButton.pack(side = LEFT, padx = 10)
+
+                #Pack all the frames
                 topFrame.pack(side = TOP)
                 midFrame.pack(side = TOP)
                 botFrame.pack(side = TOP)
@@ -179,16 +188,38 @@ class SimGPSApp:
                 self.fileLabel.config(text = self.filename)
         
         def go(self):
-                if self.filename:
+                if self.path:
+                        self.nextSentence()
+                        self.pauseButton.config(state = NORMAL)
+                        self.goButton.config(state = DISABLED)
+                elif self.filename:
                         self.path = PathSim(self.filename, self.serialVar.get(),
                                             int(self.baudVar.get()),
                                             int(self.speedVar.get()),
                                             self.fixVar.get())
+                        self.speedBox.config(state = DISABLED)
+                        self.baudBox.config(state = DISABLED)
+                        self.fileButton.config(state = DISABLED)
+                        self.goButton.config(state = DISABLED)
+                        self.serialMenu.config(state = DISABLED)
+                        self.pauseButton.config(state = NORMAL)
                         self.nextSentence()
+                        
         def nextSentence(self):
                 self.path.nextSentence()
                 self.currentLocationLabel.config(text = str(self.path.current))
-                self.master.after(1000, self.nextSentence)
+                self.afterHandle = self.master.after(1000, self.nextSentence)
+
+        def pause(self):
+                self.goButton.config(state = NORMAL)
+                self.master.after_cancel(self.afterHandle)
+                self.pauseButton.config(state = DISABLED)
+
+        def restart(self):
+                if self.path:
+                        self.path.restart()
+                        self.currentLocationLabel.config(text = "")
+                        
 class PathSim:
 
         def __init__(self, filename, serialPort, baud, speed, fix):
@@ -311,6 +342,11 @@ class PathSim:
                         numbers = i.split(',')
                         self.path.append(Coord(float(numbers[1]), float(numbers[0])))
                 f.close()
+
+        def restart(self):
+                self.count = 1
+                self.segment = SegmentIter(self.path[self.count-1],\
+                                           self.path[self.count], self.speed)
 
 
 def haversine(start, end):
