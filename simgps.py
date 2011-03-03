@@ -23,6 +23,7 @@
 
 """
 
+import sys
 import math
 import datetime
 import serial
@@ -66,11 +67,15 @@ class SegmentIter:
                 self.d = haversine(start, end)
 
                 self.distance = self.d * 6371000
-                self.count = 0
+                if tachoDirection >= 0:
+                    self.count = 0
+                else :
+                    self.count = 1
                 
                 time = self.distance / (self.speed / 3.6)
                 self.step = 1 / time    
         
+
         def next(self):
                 """
                 This is an implementation of a formula that calculates
@@ -92,9 +97,9 @@ class SegmentIter:
                 lat = math.atan2(z, math.sqrt(x**2 + y**2))
                 lon = math.atan2(y, x)
                 
-                self.count += self.step
+                self.count += self.step * tachoDirection
 
-                if self.count > 1:
+                if self.count < 0 or self.count > 1:
                         raise StopIteration
                 
                 return Coord(math.degrees(lat), math.degrees(lon))
@@ -103,39 +108,60 @@ class SegmentIter:
                 return self
 class SimGPSApp:
 
-        def __init__(self, master = None):
+        def __init__(self, master = None, pathfilename = ""):
                 master.title("SimGPS")
 
                 frame = Frame(master)
 
                 self.master = master
 
-                topFrame = Frame(frame)
-                midFrame = Frame(frame)
-                botFrame = Frame(frame)
+                topFrame = Frame(frame, bd=2, relief=RIDGE)
+                gpsSerialFrame = Frame(frame, bd=2, relief=RIDGE)
+                tachSerialFrame = Frame(frame, bd=2, relief=RIDGE)
+                botFrame = Frame(frame, bd=2, relief=RIDGE)
                 labelFrame = Frame(frame)
-                buttonFrame = Frame(frame)
+                buttonFrame = Frame(frame, bd=1)
 
                 #Contents of topFrame, open file button and label
                 self.fileButton = Button(topFrame, text = "Open Path File",\
                                          command = self.openFile)
                 self.fileButton.pack(side = LEFT, anchor = W)
-                self.fileLabel = Label(topFrame, text = "No file loaded")
+                if pathfilename:
+                    self.filename = cmdlineFilename
+                    self.fileLabel = Label(topFrame, text = self.filename)
+                else :
+                    self.fileLabel = Label(topFrame, text = "No file loaded")
                 self.fileLabel.pack(side = LEFT, anchor = W)
 
                 #Content of midFrame, serial options
+
                 ports = findSerialPorts()
-                self.serialVar = StringVar(master)
                 if not ports:
-                        ports = ["No ports found"]
-                self.serialVar.set(ports[0])
-                self.serialMenu = apply(OptionMenu, (midFrame, self.serialVar)\
-                                        + tuple(ports))
-                self.serialMenu.pack(side = LEFT)
+                        ports = [""]
+
                 self.baudVar = StringVar()
                 self.baudVar.set("57600")
-                self.baudBox = Entry(midFrame, textvariable = self.baudVar)
-                self.baudBox.pack(side = LEFT)
+                self.baudBox = Entry(gpsSerialFrame, textvariable = self.baudVar)
+                self.baudBox.pack(side = RIGHT, padx = 10)
+                self.serialVar = StringVar(master)
+                self.serialVar.set(ports[0])
+                self.serialMenu = apply(OptionMenu, (gpsSerialFrame, self.serialVar)\
+                                        + tuple(ports))
+                self.serialMenu.pack(side = RIGHT)
+                self.gpsLabel = Label(gpsSerialFrame, text = "GPS output:")
+                self.gpsLabel.pack(side = RIGHT, anchor = W)
+
+                self.tachBaudVar = StringVar()
+                self.tachBaudVar.set("57600")
+                self.tachBaudBox = Entry(tachSerialFrame, textvariable = self.baudVar)
+                self.tachBaudBox.pack(side = RIGHT, padx = 10)
+                self.tachSerialVar = StringVar(master)
+                self.tachSerialVar.set(ports[0])
+                self.tachSerialMenu = apply(OptionMenu, (tachSerialFrame, self.tachSerialVar)\
+                                        + tuple(ports))
+                self.tachSerialMenu.pack(side = RIGHT)
+                self.tachLabel = Label(tachSerialFrame, text = "Tacho control:")
+                self.tachLabel.pack(side = RIGHT, anchor = W)
 
                 #Contents of botFrame, speed and fix type
                 self.fixVar = StringVar(master)
@@ -150,6 +176,16 @@ class SimGPSApp:
                                       justify = RIGHT)
                 self.speedBox.pack(side = LEFT)
                 Label(botFrame, text = "km/h").pack(side = LEFT)
+
+                self.fButton = Button(botFrame, text = "F", state=DISABLED, \
+                                         command = self.forward)
+                self.fButton.pack(side = LEFT, anchor = W, padx = 2)
+                self.nButton = Button(botFrame, text = "N", state=DISABLED, relief=SUNKEN,\
+                                         command = self.neutral)
+                self.nButton.pack(side = LEFT, anchor = W, padx = 2)
+                self.rButton = Button(botFrame, text = "R", state=DISABLED,\
+                                         command = self.backward)
+                self.rButton.pack(side = LEFT, anchor = W, padx = 2)
 
                 #Frame exclusively for the current location label
                 self.currentLocationLabel = Label(labelFrame)
@@ -168,9 +204,10 @@ class SimGPSApp:
                 self.restartButton.pack(side = LEFT, padx = 10)
 
                 #Pack all the frames
-                topFrame.pack(side = TOP)
-                midFrame.pack(side = TOP)
-                botFrame.pack(side = TOP)
+                topFrame.pack(side = TOP, fill=X)
+                gpsSerialFrame.pack(side = TOP, fill=X)
+                tachSerialFrame.pack(side = TOP, fill=X)
+                botFrame.pack(side = TOP, fill=X)
                 labelFrame.pack(side = TOP)
                 buttonFrame.pack(side = TOP)
                 frame.pack()
@@ -186,6 +223,29 @@ class SimGPSApp:
         def openFile(self):
                 self.filename = tkFileDialog.askopenfilename()
                 self.fileLabel.config(text = self.filename)
+
+        def forward(self):
+                global tachoDirection
+                tachoDirection = 1
+                self.fButton.config(state = ACTIVE, relief=SUNKEN)
+                self.nButton.config(state = NORMAL, relief=RAISED)
+                self.rButton.config(state = NORMAL, relief=RAISED)
+                if self.path:
+                    self.path.forward()
+        def neutral(self):
+                self.nButton.config(state = ACTIVE, relief=SUNKEN)
+                self.fButton.config(state = NORMAL, relief=RAISED)
+                self.rButton.config(state = NORMAL, relief=RAISED)
+                if self.path:
+                    self.path.neutral()
+        def backward(self):
+                global tachoDirection
+                tachoDirection = -1
+                self.rButton.config(state = ACTIVE, relief=SUNKEN)
+                self.nButton.config(state = NORMAL, relief=RAISED)
+                self.fButton.config(state = NORMAL, relief=RAISED)
+                if self.path:
+                    self.path.backward()
         
         def go(self):
                 if self.path:
@@ -195,14 +255,21 @@ class SimGPSApp:
                 elif self.filename:
                         self.path = PathSim(self.filename, self.serialVar.get(),
                                             int(self.baudVar.get()),
+                                            self.tachSerialVar.get(),
+                                            int(self.tachBaudVar.get()),
                                             int(self.speedVar.get()),
                                             self.fixVar.get())
                         self.speedBox.config(state = DISABLED)
                         self.baudBox.config(state = DISABLED)
+                        self.tachBaudBox.config(state = DISABLED)
                         self.fileButton.config(state = DISABLED)
                         self.goButton.config(state = DISABLED)
                         self.serialMenu.config(state = DISABLED)
+                        self.tachSerialMenu.config(state = DISABLED)
                         self.pauseButton.config(state = NORMAL)
+                        self.fButton.config(state = NORMAL, relief=RAISED)
+                        self.nButton.config(state = NORMAL, relief=SUNKEN)
+                        self.rButton.config(state = NORMAL, relief=RAISED)
                         self.nextSentence()
                         
         def nextSentence(self):
@@ -222,13 +289,14 @@ class SimGPSApp:
                         
 class PathSim:
 
-        def __init__(self, filename, serialPort, baud, speed, fix):
+        def __init__(self, filename, serialPort, baud, tachoPort, tachoBaud, speed, fix):
                 if filename.endswith(".kml"):
                         self.open_kml(filename)
                 else :
                         self.open_file(filename)
                         
                 self.ser = serial.Serial(serialPort, baud, timeout=0)
+                self.tacho = serial.Serial(tachoPort, tachoBaud, timeout=0)
                 self.speed = speed
                 self.heading = 0
 
@@ -237,17 +305,27 @@ class PathSim:
                                            self.path[self.count], self.speed)
                 self.fix = fix
 
+        def forward(self):
+               self.tacho.write("500\rF\r")
+ 
+        def neutral(self):
+               self.tacho.write("500\rN\r")
+                
+        def backward(self):
+               self.tacho.write("500\rB\r")
+        
         def nextSentence(self):
                 try:
                         self.current = self.segment.next()
                         sentence = self.toNMEA(self.current)
-                        #print sentence
                         self.ser.write(sentence)
-                        print self.ser.read(1000)
+                        print self.ser.read(1000),
                 except StopIteration:
-                        self.count += 1
+                        self.count += tachoDirection
                         if self.count >= len(self.path):
                                 self.count = 1
+                        if self.count < 1:
+                                self.count = len(self.path)-1
                         self.segment = SegmentIter(self.path[self.count-1],\
                                            self.path[self.count], self.speed)
 
@@ -393,6 +471,12 @@ def findSerialPorts():
     return available
 
 if __name__ == "__main__":
+        global tachoDirection
+        tachoDirection=0
+        if len(sys.argv) > 1:
+            cmdlineFilename=sys.argv[1]
+        else :
+            cmdlineFilename=""
         root = Tk()
-        SimGPSApp(root)
+        SimGPSApp(root, cmdlineFilename)
         root.mainloop()
