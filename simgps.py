@@ -119,6 +119,7 @@ class SimGPSApp:
                 gpsSerialFrame = Frame(frame, bd=2, relief=RIDGE)
                 tachSerialFrame = Frame(frame, bd=2, relief=RIDGE)
                 botFrame = Frame(frame, bd=2, relief=RIDGE)
+                tachoControlFrame = Frame(frame, bd=2, relief=RIDGE)
                 labelFrame = Frame(frame)
                 buttonFrame = Frame(frame, bd=1)
 
@@ -151,6 +152,7 @@ class SimGPSApp:
                 self.gpsLabel = Label(gpsSerialFrame, text = "GPS output:")
                 self.gpsLabel.pack(side = RIGHT, anchor = W)
 
+                #Contents of tachSerialFrame, tacho serial options
                 self.tachBaudVar = StringVar()
                 self.tachBaudVar.set("57600")
                 self.tachBaudBox = Entry(tachSerialFrame, textvariable = self.baudVar)
@@ -177,15 +179,24 @@ class SimGPSApp:
                 self.speedBox.pack(side = LEFT)
                 Label(botFrame, text = "km/h").pack(side = LEFT)
 
-                self.fButton = Button(botFrame, text = "F", state=DISABLED, \
+                #Contents of tachoControlFrame, direction controls and
+                #calibration
+                self.fButton = Button(tachoControlFrame, text = "F", state=DISABLED,\
                                          command = self.forward)
                 self.fButton.pack(side = LEFT, anchor = W, padx = 2)
-                self.nButton = Button(botFrame, text = "N", state=DISABLED, relief=SUNKEN,\
+                self.nButton = Button(tachoControlFrame, text = "N",state=DISABLED, relief=SUNKEN,\
                                          command = self.neutral)
                 self.nButton.pack(side = LEFT, anchor = W, padx = 2)
-                self.rButton = Button(botFrame, text = "R", state=DISABLED,\
+                self.rButton = Button(tachoControlFrame, text = "R", state=DISABLED,\
                                          command = self.backward)
                 self.rButton.pack(side = LEFT, anchor = W, padx = 2)
+
+                self.calibVar = StringVar()
+                self.calibVar.set("12.00")
+                self.calibBox = Entry(tachoControlFrame, textvariable =
+                                      self.calibVar, justify = RIGHT)
+                self.calibBox.pack(side = LEFT)
+                Label(tachoControlFrame, text = "ticks/m").pack(side = LEFT)
 
                 #Frame exclusively for the current location label
                 self.currentLocationLabel = Label(labelFrame)
@@ -208,6 +219,7 @@ class SimGPSApp:
                 gpsSerialFrame.pack(side = TOP, fill=X)
                 tachSerialFrame.pack(side = TOP, fill=X)
                 botFrame.pack(side = TOP, fill=X)
+                tachoControlFrame.pack(side = TOP, fill = X)
                 labelFrame.pack(side = TOP)
                 buttonFrame.pack(side = TOP)
                 frame.pack()
@@ -231,13 +243,13 @@ class SimGPSApp:
                 self.nButton.config(state = NORMAL, relief=RAISED)
                 self.rButton.config(state = NORMAL, relief=RAISED)
                 if self.path:
-                    self.path.forward()
+                    self.path.forward(float(self.calibVar.get()))
         def neutral(self):
                 self.nButton.config(state = ACTIVE, relief=SUNKEN)
                 self.fButton.config(state = NORMAL, relief=RAISED)
                 self.rButton.config(state = NORMAL, relief=RAISED)
                 if self.path:
-                    self.path.neutral()
+                    self.path.neutral(float(self.calibVar.get()))
         def backward(self):
                 global tachoDirection
                 tachoDirection = -1
@@ -245,7 +257,7 @@ class SimGPSApp:
                 self.nButton.config(state = NORMAL, relief=RAISED)
                 self.fButton.config(state = NORMAL, relief=RAISED)
                 if self.path:
-                    self.path.backward()
+                    self.path.backward(float(self.calibVar.get()))
         
         def go(self):
                 if self.path:
@@ -289,7 +301,8 @@ class SimGPSApp:
                         
 class PathSim:
 
-        def __init__(self, filename, serialPort, baud, tachoPort, tachoBaud, speed, fix):
+        def __init__(self, filename, serialPort, baud, tachoPort, tachoBaud,
+                     speed, fix):
                 if filename.endswith(".kml"):
                         self.open_kml(filename)
                 else :
@@ -297,7 +310,7 @@ class PathSim:
                         
                 self.ser = serial.Serial(serialPort, baud, timeout=0)
                 self.tacho = serial.Serial(tachoPort, tachoBaud, timeout=0)
-                self.speed = speed
+                self.speed = speed #km/h
                 self.heading = 0
 
                 self.count = 1
@@ -305,14 +318,23 @@ class PathSim:
                                            self.path[self.count], self.speed)
                 self.fix = fix
 
-        def forward(self):
-               self.tacho.write("500\rF\r")
+        def forward(self, cal = 12):
+               speedms = self.speed / 3.6
+               tps = speedms * cal #ticks per second
+               tps = int(round(tps))
+               self.tacho.write("%d\rF\r" % (tps))
  
-        def neutral(self):
-               self.tacho.write("500\rN\r")
+        def neutral(self, cal = 12):
+               speedms = self.speed / 3.6
+               tps = speedms * cal #ticks per second
+               tps = int(round(tps))
+               self.tacho.write("%d\rN\r" % (tps))
                 
-        def backward(self):
-               self.tacho.write("500\rB\r")
+        def backward(self, cal = 12):
+               speedms = self.speed / 3.6
+               tps = speedms * cal #ticks per second
+               tps = int(round(tps))
+               self.tacho.write("%d\rB\r" % (tps))
         
         def nextSentence(self):
                 try:
