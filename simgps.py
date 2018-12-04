@@ -79,8 +79,7 @@ class SegmentIter:
 
                 It was inspired by the description given on this page:
 
-                http://williams.best.vwh.net/avform.htm#Intermediate
-
+                http://www.edwilliams.org/avform.htm#Intermediate
                 """
                 A = math.sin((1 - self.count)*self.d) / math.sin(self.d)
                 B = math.sin(self.count * self.d) / math.sin(self.d)
